@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blood Flow Simulator</title>
+<!--
+ Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License
+ Copyright (c) 2024 Ian Victor Joseph Murray imurra@yahoo.com
+ This work is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.
+ To view a copy of this license, visit http://creativecommons.org/licenses/by-nc-sa/4.0/
+
+ TERMS AND CONDITIONS:
+ 1. ATTRIBUTION: You must give appropriate credit to Ian Murray, provide a link to the license,
+    and indicate if changes were made. You may do so in any reasonable manner, but not in any way
+    that suggests the licensor endorses you or your use.
+ 2. NON-COMMERCIAL: You may not use this material for commercial purposes.
+ 3. EDUCATIONAL USE: This software is specifically designed for educational purposes in medical
+    and healthcare education. Free to use in classrooms, modify, and share with other educators/students.
+ 4. SHARE ALIKE: If you remix, transform, or build upon the material, you must distribute your
+    contributions under the same license as the original.
+ 5. WARRANTY: This software is provided "as is" without warranty of any kind.
+ For permissions beyond the scope of this license, please contact the author directly.
+ Full license: http://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
+-->
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #F7F7F8;
+    color: #1a1a1a;
+    margin: 0;
+    padding: 16px;
+  }
+  #wrap { max-width: 720px; margin: 0 auto; position: relative; padding-bottom: 56px; }
+  .card { background: #fff; border: 1px solid #E5E5E5; border-radius: 8px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .card-header { padding: 16px 16px 0 16px; }
+  .card-title { font-size: 16px; font-weight: 700; margin: 0 0 12px 0; }
+  .card-content { padding: 16px; }
+  .pressure-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .pressure-box { text-align:center; }
+  .pressure-label { font-weight:700; font-size:13px; }
+  .pressure-val { font-size:14px; }
+  .arrow { margin: 0 16px; font-size: 20px; color:#444; }
+  canvas#flowCanvas { width:100%; height:160px; background:#F0F0F2; border-radius:4px; display:block; }
+  .flow-readout { text-align:center; margin-top:8px; }
+  .flow-readout .label { font-weight:700; font-size:13px; }
+  .slider-group { margin-bottom:16px; }
+  .slider-group:last-child { margin-bottom:0; }
+  .slider-group label { display:block; margin-bottom:6px; font-size:13px; }
+  input[type=range] { width:100%; }
+  svg#pressureChart { width:100%; height:auto; display:block; }
+  .equation { text-align:center; font-size:18px; padding: 4px 0; }
+  .cc-footer { position:fixed; bottom:16px; left:16px; display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.9); padding:6px 10px; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.15); font-size:12px; font-weight:600; color:#333; }
+  .cc-footer svg { height:20px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Blood Flow Simulator: Artery to Arteriole with Variable Restriction</h2></div>
+    <div class="card-content">
+      <div class="pressure-row">
+        <div class="pressure-box">
+          <div class="pressure-label">Upstream Pressure</div>
+          <div class="pressure-val" id="upVal">95 mmHg</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="pressure-box">
+          <div class="pressure-label">Downstream Pressure</div>
+          <div class="pressure-val" id="downVal">5 mmHg</div>
+        </div>
+      </div>
+      <canvas id="flowCanvas"></canvas>
+      <div class="flow-readout">
+        <div class="label">Flow</div>
+        <div id="flowVal">0.00 mL/min</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Controls</h2></div>
+    <div class="card-content">
+      <div class="slider-group">
+        <label>Upstream Pressure (0–200 mmHg)</label>
+        <input type="range" id="upstreamSlider" min="0" max="200" step="1" value="95">
+      </div>
+      <div class="slider-group">
+        <label>Downstream Pressure (0–200 mmHg)</label>
+        <input type="range" id="downstreamSlider" min="0" max="200" step="1" value="5">
+      </div>
+      <div class="slider-group">
+        <label>Vessel Restriction (0–100%)</label>
+        <input type="range" id="restrictionSlider" min="0" max="100" step="1" value="0">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Pressure Along Vessel</h2></div>
+    <div class="card-content">
+      <svg id="pressureChart" viewBox="0 0 600 220"></svg>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Equation</h2></div>
+    <div class="card-content">
+      <div class="equation">Flow = ΔP/R, where R = 8ηL/πr⁴</div>
+    </div>
+  </div>
+
+  <div class="cc-footer">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 121">
+      <circle cx="158.3" cy="60.7" r="53" fill="none" stroke="black" stroke-width="10"/>
+      <circle cx="336" cy="60.7" r="53" fill="none" stroke="black" stroke-width="10"/>
+      <text x="400" y="88" font-size="90" fill="black">4.0</text>
+      <path d="M71.5,89 L245,89" stroke="black" stroke-width="10"/>
+      <path d="M249,38 L71.5,38" stroke="black" stroke-width="10"/>
+      <path d="M158.3,60.7 m-23,-15 l23,30 l23,-30" fill="none" stroke="black" stroke-width="10"/>
+      <path d="M336,60.7 m-23,-15 l23,30 l23,-30" fill="none" stroke="black" stroke-width="10"/>
+    </svg>
+    <span>CC BY-NC-SA · Dr. Ian Murray</span>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// Blood Flow Simulator — standalone HTML port (vanilla JS/Canvas)
+// Ported 1:1 from the React source: Poiseuille's law, restriction resistance,
+// laminar particle animation, pressure-along-vessel chart.
+// ═══════════════════════════════════════════════════════════════════
+
+let upstreamPressure = 95;
+let downstreamPressure = 5;
+let restriction = 0;
+let flow = 0;
+
+const canvas = document.getElementById('flowCanvas');
+const ctx = canvas.getContext('2d');
+let particles = [];
+
+function resizeCanvas() {
+  canvas.width = canvas.offsetWidth;
+  canvas.height = canvas.offsetHeight;
+}
+
+function createParticles() {
+  const particleCount = 200;
+  const arr = [];
+  for (let i = 0; i < particleCount; i++) {
+    arr.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      speed: 0
+    });
+  }
+  return arr;
+}
+
+function computeFlow() {
+  const baseRadius = 1;
+  const restrictedRadius = baseRadius * (1 - restriction);
+  const restrictionResistance = restriction > 0 ? 8 * Math.pow(baseRadius / restrictedRadius, 4) : 1;
+  const pressureGradient = upstreamPressure - downstreamPressure;
+  flow = (pressureGradient / restrictionResistance) * 55.55;
+}
+
+function animate() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const normalWidth = canvas.height * 0.4;
+  const restrictedWidth = normalWidth * (1 - restriction);
+  const restrictionPoint = canvas.width * 0.3;
+
+  ctx.beginPath();
+  ctx.moveTo(0, canvas.height / 2 - normalWidth / 2);
+  ctx.lineTo(restrictionPoint, canvas.height / 2 - normalWidth / 2);
+  ctx.lineTo(restrictionPoint, canvas.height / 2 - restrictedWidth / 2);
+  ctx.lineTo(canvas.width, canvas.height / 2 - restrictedWidth / 2);
+  ctx.lineTo(canvas.width, canvas.height / 2 + restrictedWidth / 2);
+  ctx.lineTo(restrictionPoint, canvas.height / 2 + restrictedWidth / 2);
+  ctx.lineTo(restrictionPoint, canvas.height / 2 + normalWidth / 2);
+  ctx.lineTo(0, canvas.height / 2 + normalWidth / 2);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255, 240, 240, 0.5)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+  ctx.stroke();
+
+  particles.forEach((particle) => {
+    const areaRatio = Math.pow(normalWidth / restrictedWidth, 2);
+    const velocityMultiplier = particle.x < restrictionPoint ? 1 : Math.min(areaRatio, 5);
+
+    const distanceFromCenter = Math.abs(particle.y - canvas.height / 2);
+    const currentWidth = particle.x < restrictionPoint ? normalWidth : restrictedWidth;
+    const normalizedDistance = distanceFromCenter / (currentWidth / 2);
+
+    const laminarProfile = Math.pow(1 - Math.pow(normalizedDistance, 2), 2);
+    const baseSpeed = Math.max(Math.abs(flow) / 500, 0.1);
+    const direction = flow >= 0 ? 1 : -1;
+
+    particle.speed = baseSpeed * velocityMultiplier * direction * laminarProfile;
+
+    if (distanceFromCenter <= currentWidth / 2) {
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, 2, 0, Math.PI * 2);
+      ctx.fillStyle = 'red';
+      ctx.fill();
+
+      particle.x += particle.speed;
+
+      if ((direction > 0 && particle.x > canvas.width) ||
+          (direction < 0 && particle.x < 0)) {
+        particle.x = direction > 0 ? 0 : canvas.width;
+        particle.y = Math.random() * currentWidth + (canvas.height / 2 - currentWidth / 2);
+      }
+    } else {
+      particle.x = direction > 0 ? 0 : canvas.width;
+      particle.y = Math.random() * normalWidth + (canvas.height / 2 - normalWidth / 2);
+    }
+  });
+
+  requestAnimationFrame(animate);
+}
+
+function getPressureData() {
+  const totalPressureDrop = upstreamPressure - downstreamPressure;
+  const pressureBeforeRestriction = upstreamPressure - (totalPressureDrop * 0.2);
+  const pressureAtRestriction = upstreamPressure - (totalPressureDrop * (0.3 + restriction * 0.4));
+
+  return [
+    { position: 0, pressure: upstreamPressure },
+    { position: 20, pressure: pressureBeforeRestriction },
+    { position: 30, pressure: pressureAtRestriction },
+    { position: 40, pressure: pressureAtRestriction - (totalPressureDrop * 0.3) },
+    { position: 50, pressure: pressureAtRestriction - (totalPressureDrop * 0.4) },
+    { position: 100, pressure: downstreamPressure }
+  ];
+}
+
+// ─── Pressure chart (vanilla SVG line chart, replacing recharts) ───
+const CW = 600, CH = 220;
+const CPD = { t: 10, r: 20, b: 30, l: 40 };
+const CGW = CW - CPD.l - CPD.r, CGH = CH - CPD.t - CPD.b;
+
+function cx(pos) { return CPD.l + (pos / 100) * CGW; }
+function cy(pressure) { return CPD.t + CGH - (Math.max(0, Math.min(pressure, 200)) / 200) * CGH; }
+
+function renderChart() {
+  const data = getPressureData();
+  const yTicks = [0, 50, 100, 150, 200];
+  const xTicks = [0, 20, 30, 40, 50, 100];
+
+  const gridLines = yTicks.map(p =>
+    `<line x1="${CPD.l}" y1="${cy(p)}" x2="${CPD.l + CGW}" y2="${cy(p)}" stroke="#ccc" stroke-dasharray="5,5" stroke-width="1"/>`
+  ).join("");
+
+  const yLabels = yTicks.map(p =>
+    `<text x="${CPD.l - 6}" y="${cy(p) + 4}" text-anchor="end" font-size="10" fill="#666">${p}</text>`
+  ).join("");
+
+  const xLabels = xTicks.map(p =>
+    `<text x="${cx(p)}" y="${CPD.t + CGH + 16}" text-anchor="middle" font-size="10" fill="#666">${p}</text>`
+  ).join("");
+
+  const linePoints = data.map(d => `${cx(d.position).toFixed(1)},${cy(d.pressure).toFixed(1)}`).join(" ");
+  const dots = data.map(d =>
+    `<circle cx="${cx(d.position).toFixed(1)}" cy="${cy(d.pressure).toFixed(1)}" r="3.5" fill="#8884d8"/>`
+  ).join("");
+
+  document.getElementById('pressureChart').innerHTML = `
+    ${gridLines}
+    <line x1="${CPD.l}" y1="${CPD.t}" x2="${CPD.l}" y2="${CPD.t + CGH}" stroke="#999" stroke-width="1"/>
+    <line x1="${CPD.l}" y1="${CPD.t + CGH}" x2="${CPD.l + CGW}" y2="${CPD.t + CGH}" stroke="#999" stroke-width="1"/>
+    ${yLabels}
+    ${xLabels}
+    <text x="${CPD.l + CGW / 2}" y="${CH - 2}" text-anchor="middle" font-size="11" fill="#444">Position (%)</text>
+    <polyline points="${linePoints}" fill="none" stroke="#8884d8" stroke-width="2"/>
+    ${dots}
+  `;
+}
+
+function render() {
+  computeFlow();
+  document.getElementById('upVal').textContent = `${upstreamPressure} mmHg`;
+  document.getElementById('downVal').textContent = `${downstreamPressure} mmHg`;
+  document.getElementById('flowVal').textContent = `${flow.toFixed(2)} mL/min`;
+  renderChart();
+}
+
+document.getElementById('upstreamSlider').addEventListener('input', (e) => {
+  upstreamPressure = parseFloat(e.target.value);
+  render();
+});
+document.getElementById('downstreamSlider').addEventListener('input', (e) => {
+  downstreamPressure = parseFloat(e.target.value);
+  render();
+});
+document.getElementById('restrictionSlider').addEventListener('input', (e) => {
+  restriction = parseFloat(e.target.value) / 100;
+  render();
+});
+
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+particles = createParticles();
+render();
+animate();
+</script>
+</body>
+</html>
